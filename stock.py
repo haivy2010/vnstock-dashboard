@@ -8,7 +8,7 @@ from datetime import datetime
 import os
 
 # Đặt đường dẫn cố định đến folder chứa dữ liệu
-FOLDER_PATH = r'D:\dai hoc\Data\processed\valid_data'
+FOLDER_PATH = 'https://raw.githubusercontent.com/haivy2010/vnstock-dashboard/main/data/'
 
 # SECTION 1: Utility Functions
 def get_available_symbols(folder_path):
