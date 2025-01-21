@@ -9,7 +9,7 @@ from datetime import datetime
 import os
 
 # Constants
-FOLDER_PATH = "data"
+FOLDER_PATH = "FOLDER_PATH"
 
 class StockData:
     def __init__(self, folder_path):
