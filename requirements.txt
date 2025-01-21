@@ -1,5 +1,5 @@
 streamlit
-pandas
+pandas==1.5.3
 numpy
 plotly
-pandas_ta
+git+https://github.com/twopirllc/pandas-ta.git
