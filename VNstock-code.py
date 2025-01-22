@@ -825,88 +825,124 @@ def main():
             st.error(f"Error processing data: {str(e)}")
             st.exception(e)
 
+# Create and export PDF files
+class StockData:
+    def __init__(self, folder_path):
+        self.folder_path = folder_path
+
+    def get_available_symbols(self):
+        try:
+            return [f.replace('.csv', '') for f in os.listdir(self.folder_path) if f.endswith('.csv')]
+        except Exception as e:
+            return []
+
+    def load_stock_data(self, symbol):
+        try:
+            file_path = os.path.join(self.folder_path, f"{symbol}.csv")
+            df = pd.read_csv(file_path, parse_dates=['Date'])
+            df = df.sort_values('Date').drop_duplicates(subset=['Date']).reset_index(drop=True)
+            return df
+        except Exception as e:
+            return None
+
+def generate_pdf(data, ticker, start_date, end_date, chart_image_path):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font('Arial', 'B', 16)
+    pdf.cell(0, 10, f"Stock Report: {ticker}", ln=True, align='C')
+    pdf.ln(10)
+
+    # Add time range
+    pdf.set_font('Arial', '', 12)
+    pdf.cell(0, 10, f"Time Range: {start_date} to {end_date}", ln=True)
+    pdf.ln(10)
+
+    # Add chart
+    pdf.set_font('Arial', 'B', 12)
+    pdf.cell(0, 10, "Price Chart:", ln=True)
+    pdf.image(chart_image_path, x=10, y=None, w=190)
+    pdf.ln(10)
+
+    # Add data table
+    pdf.set_font('Arial', 'B', 12)
+    pdf.cell(0, 10, "Historical Data (Last 10 Records):", ln=True)
+    pdf.set_font('Arial', '', 10)
+
+    table_cell_width = 30
+    table_cell_height = 6
+    cols = ['Date', 'Price Open', 'Price High', 'Price Low', 'Price Close', 'Volume']
+
+    for col in cols:
+        pdf.cell(table_cell_width, table_cell_height, col, border=1, align='C')
+    pdf.ln(table_cell_height)
+
+    for _, row in data.tail(10).iterrows():
+        for col in cols:
+            pdf.cell(table_cell_width, table_cell_height, str(row[col]), border=1, align='C')
+        pdf.ln(table_cell_height)
+
+    output_file = f"{ticker}_report.pdf"
+    pdf.output(output_file)
+    return output_file
+
+def create_chart(data, ticker):
+    fig = go.Figure()
+    fig.add_trace(go.Candlestick(
+        x=data['Date'],
+        open=data['Price Open'],
+        high=data['Price High'],
+        low=data['Price Low'],
+        close=data['Price Close'],
+        name=ticker
+    ))
+    fig.update_layout(title=f"{ticker} Price Chart", xaxis_title="Date", yaxis_title="Price (VND)",
+                      template="plotly_white")
+    chart_path = f"{ticker}_chart.png"
+    fig.write_image(chart_path)
+    return chart_path
+
+def main():
+    st.set_page_config(layout="wide", page_title="Stock Dashboard")
+    st.title('Vietnam Stocks Dashboard')
+
+    stock_data = StockData(FOLDER_PATH)
+
+    if not os.path.exists(FOLDER_PATH):
+        st.error("Invalid folder path!")
+        return
+
+    available_symbols = stock_data.get_available_symbols()
+    if not available_symbols:
+        st.error("No CSV files found!")
+        return
+
+    ticker = st.selectbox("Select Stock Symbol", available_symbols)
+    start_date = st.date_input("Start Date", value=datetime(2000, 1, 1))
+    end_date = st.date_input("End Date", value=datetime(2022, 12, 31))
+
+    if st.button("Generate Report"):
+        data = stock_data.load_stock_data(ticker)
+
+        if data is None:
+            st.error("Failed to load stock data!")
+            return
+
+        data = data[(data['Date'] >= pd.to_datetime(start_date)) & (data['Date'] <= pd.to_datetime(end_date))]
+
+        if data.empty:
+            st.warning("No data available for the selected date range.")
+            return
+
+        # Create chart and save it
+        chart_path = create_chart(data, ticker)
+
+        # Generate PDF
+        with st.spinner("Generating PDF..."):
+            pdf_path = generate_pdf(data, ticker, start_date, end_date, chart_path)
+
+        st.success("Report generated successfully!")
+        with open(pdf_path, "rb") as pdf_file:
+            st.download_button(label="Download PDF Report", data=pdf_file, file_name=pdf_path, mime="application/pdf")
+
 if __name__ == "__main__":
     main()
-
-# Create and export PDF files
-from fpdf import FPDF
-from io import BytesIO
-import base64
-
-def create_pdf(data, chart_fig, selected_indicators):
-    """Tạo file PDF từ dữ liệu và biểu đồ"""
-    pdf = FPDF()
-    pdf.set_auto_page_break(auto=True, margin=15)
-    pdf.add_page()
-    pdf.set_font("Arial", size=12)
-
-    # Title
-    pdf.set_font("Arial", style="B", size=16)
-    pdf.cell(200, 10, txt="Stock Analysis Report", ln=True, align='C')
-    pdf.ln(10)
-
-    # Data overview
-    pdf.set_font("Arial", style="B", size=14)
-    pdf.cell(0, 10, txt="Overview", ln=True)
-    pdf.ln(5)
-    pdf.set_font("Arial", size=12)
-    overview_text = f"Selected Stock: {data['Ticker']}\n"
-    overview_text += f"Time Period: {data['Time Period']}\n"
-    overview_text += f"Indicators: {', '.join(selected_indicators)}\n"
-    pdf.multi_cell(0, 10, txt=overview_text)
-
-    # Detailed data
-    pdf.set_font("Arial", style="B", size=14)
-    pdf.cell(0, 10, txt="Detailed Data", ln=True)
-    pdf.ln(5)
-
-    # Export data in tabular format
-    col_width = pdf.w / 4.5 
-    row_height = pdf.font_size * 1.5
-    for i, row in data['Table Data'].iterrows():
-        for value in row:
-            pdf.cell(col_width, row_height, txt=str(value), border=1)
-        pdf.ln(row_height)
-    pdf.ln(10)
-
-    # Chart
-    pdf.set_font("Arial", style="B", size=14)
-    pdf.cell(0, 10, txt="Chart", ln=True)
-    pdf.ln(5)
-
-    # Save chart to temporary file and add to PDF
-    img_buffer = BytesIO()
-    chart_fig.write_image(img_buffer, format="png")
-    img_buffer.seek(0)
-    pdf.image(img_buffer, x=10, y=None, w=190)
-
-    # Save PDF file to buffer
-    pdf_buffer = BytesIO()
-    pdf.output(pdf_buffer)
-    pdf_buffer.seek(0)
-    return pdf_buffer
-
-# Button Integration in Streamlit
-if st.button("Export to PDF"):
-    # Check ticker
-    if not ticker:
-        st.error("No stock symbol selected. Please select a stock symbol before exporting.")
-    elif data is None or data.empty:
-        st.error("No data available for the selected stock symbol. Please update the chart first.")
-    else:
-        with st.spinner("Generating PDF..."):
-            pdf_buffer = create_pdf(
-                data={
-                    'Ticker': ticker,
-                    'Time Period': time_period,
-                    'Table Data': display_df 
-                },
-                chart_fig=fig,
-                selected_indicators=indicators
-            )
-            st.success("PDF generated successfully!")
-            
-            # Generate PDF download link
-            b64 = base64.b64encode(pdf_buffer.read()).decode()
-            href = f'<a href="data:application/octet-stream;base64,{b64}" download="stock_report.pdf">Download PDF</a>'
-            st.markdown(href, unsafe_allow_html=True)
