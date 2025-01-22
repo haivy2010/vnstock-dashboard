@@ -825,7 +825,10 @@ def main():
             st.error(f"Error processing data: {str(e)}")
             st.exception(e)
 
-# Create and export PDF files
+if __name__ == "__main__":
+    main()
+
+# Create & Export PDF
 class StockData:
     def __init__(self, folder_path):
         self.folder_path = folder_path
@@ -845,9 +848,72 @@ class StockData:
         except Exception as e:
             return None
 
-# Main function for dashboard
-def show_dashboard(stock_data):
-    st.title("Vietnam Stocks Dashboard")
+def generate_pdf(data, ticker, start_date, end_date, chart_image_path):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font('Arial', 'B', 16)
+    pdf.cell(0, 10, f"Stock Report: {ticker}", ln=True, align='C')
+    pdf.ln(10)
+
+    # Add time range
+    pdf.set_font('Arial', '', 12)
+    pdf.cell(0, 10, f"Time Range: {start_date} to {end_date}", ln=True)
+    pdf.ln(10)
+
+    # Add chart
+    pdf.set_font('Arial', 'B', 12)
+    pdf.cell(0, 10, "Price Chart:", ln=True)
+    pdf.image(chart_image_path, x=10, y=None, w=190)
+    pdf.ln(10)
+
+    # Add data table
+    pdf.set_font('Arial', 'B', 12)
+    pdf.cell(0, 10, "Historical Data (Last 10 Records):", ln=True)
+    pdf.set_font('Arial', '', 10)
+
+    table_cell_width = 30
+    table_cell_height = 6
+    cols = ['Date', 'Price Open', 'Price High', 'Price Low', 'Price Close', 'Volume']
+
+    for col in cols:
+        pdf.cell(table_cell_width, table_cell_height, col, border=1, align='C')
+    pdf.ln(table_cell_height)
+
+    for _, row in data.tail(10).iterrows():
+        for col in cols:
+            pdf.cell(table_cell_width, table_cell_height, str(row[col]), border=1, align='C')
+        pdf.ln(table_cell_height)
+
+    output_file = f"{ticker}_report.pdf"
+    pdf.output(output_file)
+    return output_file
+
+def create_chart(data, ticker):
+    fig = go.Figure()
+    fig.add_trace(go.Candlestick(
+        x=data['Date'],
+        open=data['Price Open'],
+        high=data['Price High'],
+        low=data['Price Low'],
+        close=data['Price Close'],
+        name=ticker
+    ))
+    fig.update_layout(title=f"{ticker} Price Chart", xaxis_title="Date", yaxis_title="Price (VND)",
+                      template="plotly_white")
+    chart_path = f"{ticker}_chart.png"
+    fig.write_image(chart_path)
+    return chart_path
+
+def main():
+    st.set_page_config(layout="wide", page_title="Stock Dashboard")
+    st.title('Vietnam Stocks Dashboard')
+
+    stock_data = StockData(FOLDER_PATH)
+
+    if not os.path.exists(FOLDER_PATH):
+        st.error("Invalid folder path!")
+        return
+
     available_symbols = stock_data.get_available_symbols()
     if not available_symbols:
         st.error("No CSV files found!")
@@ -857,49 +923,26 @@ def show_dashboard(stock_data):
     start_date = st.date_input("Start Date", value=datetime(2000, 1, 1))
     end_date = st.date_input("End Date", value=datetime(2022, 12, 31))
 
-    if st.button("Generate Chart"):
+    if st.button("Generate Report"):
         data = stock_data.load_stock_data(ticker)
-        if data is not None:
-            data = data[(data['Date'] >= pd.to_datetime(start_date)) & (data['Date'] <= pd.to_datetime(end_date))]
-            if not data.empty:
-                st.line_chart(data[['Date', 'Price Close']].set_index('Date'))
-            else:
-                st.warning("No data available for the selected date range.")
 
-# Main function for PDF export
-def export_pdf(stock_data):
-    st.title("Export Stock Report to PDF")
-    available_symbols = stock_data.get_available_symbols()
-    if not available_symbols:
-        st.error("No CSV files found!")
-        return
+        if data is None:
+            st.error("Failed to load stock data!")
+            return
 
-    ticker = st.selectbox("Select Stock Symbol", available_symbols)
-    start_date = st.date_input("Start Date for PDF", value=datetime(2000, 1, 1))
-    end_date = st.date_input("End Date for PDF", value=datetime(2022, 12, 31))
+        data = data[(data['Date'] >= pd.to_datetime(start_date)) & (data['Date'] <= pd.to_datetime(end_date))]
 
-    if st.button("Export PDF"):
-        data = stock_data.load_stock_data(ticker)
-        if data is not None:
-            data = data[(data['Date'] >= pd.to_datetime(start_date)) & (data['Date'] <= pd.to_datetime(end_date))]
-            if not data.empty:
-                st.success(f"PDF report for {ticker} has been generated!")
-                # Add code to generate and download PDF here
-            else:
-                st.warning("No data available for the selected date range.")
+        if data.empty:
+            st.warning("No data available for the selected date range.")
+            return
 
-# Main app logic
-def main():
-    stock_data = StockData(FOLDER_PATH)
+        # Create chart and save it
+        chart_path = create_chart(data, ticker)
 
-    # Add navigation
-    st.sidebar.title("Navigation")
-    app_mode = st.sidebar.selectbox("Choose the App Mode", ["Dashboard", "Export PDF"])
+        # Generate PDF
+        with st.spinner("Generating PDF..."):
+            pdf_path = generate_pdf(data, ticker, start_date, end_date, chart_path)
 
-    if app_mode == "Dashboard":
-        show_dashboard(stock_data)
-    elif app_mode == "Export PDF":
-        export_pdf(stock_data)
-
-if __name__ == "__main__":
-    main()
+        st.success("Report generated successfully!")
+        with open(pdf_path, "rb") as pdf_file:
+            st.download_button(label="Download PDF Report", data=pdf_file, file_name=pdf_path, mime="application/pdf")
