@@ -4,3 +4,4 @@ numpy
 plotly==5.15.0
 git+https://github.com/twopirllc/pandas-ta.git
 setuptools
+fpdf
