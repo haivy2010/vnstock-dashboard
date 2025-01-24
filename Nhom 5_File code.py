@@ -12,7 +12,7 @@ import io
 import seaborn as sns
 import matplotlib.pyplot as plt
 # Constants
-FOLDER_PATH = r'D:\Download\TAI LIEU HOC TAP\NAM 3\KY 2\GPMUD1\valid_data'
+FOLDER_PATH = "FOLDER_PATH"
 
 class StockData:
     def __init__(self, folder_path):
