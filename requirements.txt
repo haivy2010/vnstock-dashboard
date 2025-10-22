@@ -1,6 +1,6 @@
-streamlit
+streamlit==1.10.0
 pandas==1.5.3
-numpy
+numpy==1.21.4
 plotly==5.15.0
 git+https://github.com/twopirllc/pandas-ta.git
 setuptools
