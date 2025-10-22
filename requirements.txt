@@ -6,3 +6,5 @@ git+https://github.com/twopirllc/pandas-ta.git
 setuptools
 fpdf
 seaborn
+markdown-it-py==4.0.0
+rich==14.2.0
